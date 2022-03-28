@@ -1,0 +1,92 @@
+#!/bin/bash
+
+#set -x
+
+file="$1"
+f1=${file%.*}
+#exit
+
+t=/tmp/svtvp9
+t2=/tmp/svtvp9_2
+v=video.ivf
+#o=test.mkv
+o=$f1-vp9.mkv
+#log=svtav1.log
+#loge=svtav1.err
+log=$o.log
+loge=$o.err
+
+start=$(date +%s)
+
+# Stream #0:0[0x1e0]: Video: mpeg2video (Main), yuv420p(tv, top first), 720x576 [SAR 64:45 DAR 16:9], 15000 kb/s, 25 fps, 25 tbr, 90k tbn, 50 tbc
+
+#ffprobe -hide_banner -show_streams "$file" 2>/dev/null > $t
+ffprobe -hide_banner -show_streams "$file" 2> $t2 > $t
+#cat $t
+w=$(grep ^width $t)
+IFS='=' read _ w <<< $w
+h=$(grep ^height $t)
+IFS='=' read _ h <<< $h
+f=$(grep ^r_frame_rate $t)
+IFS='=' read _ f <<< $f
+#f2=$f
+#[ "$f" == "24000/1001" ] && f2="23.98"
+#[ "$f" == "24000/1001" ] && f2="24"
+#[ "$f" == "25/1" ] && f2="25"
+IFS='/' read fn fd <<< $f
+s=$(grep ^duration $t|tail -n 1)
+IFS='=' read _ s <<< $s
+if [ "$s" == "N/A" ]
+then
+    s1=$(grep "Duration:" $t2)
+    s1=$(echo $s1 | cut -d \  -f 2)
+    s1=${s1:0:8}
+    s=$(date +%s -u -d "1970-01-01 $s1")
+    #exit
+fi
+fr=$(bc <<< "$s*$f")
+fr=${fr%.*}
+# sample_aspect_ratio=64:45
+# display_aspect_ratio=16:9
+sar=$(grep ^sample_aspect_ratio $t)
+IFS='=' read _ sar <<< $sar
+sar=$(echo $sar | tr ':' '/')
+dar=$(grep ^display_aspect_ratio $t)
+IFS='=' read _ dar <<< $dar
+#dar=$(echo $dar | tr ':' '/')
+# codec_name=vc1
+# codec_name=mpeg2video
+vc=$(grep ^codec_name $t | head -n 1 | cut -d '=' -f 2)
+case $vc in
+    mpeg2video)
+	dec="-hwaccel cuvid -hwaccel_output_format cuda -c:v mpeg2_cuvid"
+	dec2="-vf hwdownload,format=nv12"
+	;;
+    vc1)
+	dec="-hwaccel cuvid -hwaccel_output_format cuda -c:v vc1_cuvid"
+	dec2="-vf hwdownload,format=nv12"
+	;;
+    h264)
+	dec="-hwaccel cuvid -hwaccel_output_format cuda -c:v h264_cuvid"
+	dec2="-vf hwdownload,format=nv12"
+	;;
+esac
+#dec=
+echo $w"x"$h $f $s $fr $sar $dar
+#exit
+
+#av1opt="-i stdin -n $fr -w $w -h $h --fps $f2 --fps-num $fn --fps-denom $fd --preset 8 -q 50 -b $v"
+#lp="--lp 4"
+#vp9opt="-i stdin -n $fr -w $w -h $h --fps-num $fn --fps-denom $fd --preset 8 -q 50 -b $v $lp"
+vp9opt="-i stdin -n $fr -w $w -h $h -fps-num $fn -fps-denom $fd -b $v $lp"
+ffmpeg -hide_banner $dec -i "$file" -nostdin $dec2 -f rawvideo -pix_fmt yuv420p - 2> "$loge" | SvtVp9EncApp $vp9opt 2>&1 | tee "$log"
+#map="-map 0 -map 1:a -map 1:s? -map_chapters 1"
+map="-map 0 -map 1:a -map_chapters 1"
+meta="-metadata:s:v:0 encoder=SVT-VP9"
+ffmpeg -hide_banner -i $v -i "$file" $map -c:v copy -aspect $dar -c:a copy $meta "$o"
+ffprobe -hide_banner "$o" 2>&1 | tee -a "$log"
+
+stop=$(date +%s)
+dur=$(($stop-$start))
+duro=$(date -u "+%T" -d @$dur)
+echo "Dauer $duro" >> "$log"
