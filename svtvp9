@@ -2,6 +2,10 @@
 
 #set -x
 
+# Trandcoding to vp9 with ffmpeg and SVT-VP9
+
+# https://github.com/OpenVisualCloud/SVT-VP
+
 file="$1"
 f1=${file%.*}
 #exit
@@ -82,7 +86,10 @@ vp9opt="-i stdin -n $fr -w $w -h $h -fps-num $fn -fps-denom $fd -b $v $lp"
 ffmpeg -hide_banner $dec -i "$file" -nostdin $dec2 -f rawvideo -pix_fmt yuv420p - 2> "$loge" | SvtVp9EncApp $vp9opt 2>&1 | tee "$log"
 #map="-map 0 -map 1:a -map 1:s? -map_chapters 1"
 map="-map 0 -map 1:a -map_chapters 1"
-meta="-metadata:s:v:0 encoder=SVT-VP9"
+vers=$(SvtVp9EncApp --version | head -n 1)
+vers=${vers//' '/_}
+#meta="-metadata:s:v:0 encoder=SVT-VP9"
+meta="-metadata:s:v:0 encoder=$vers"
 ffmpeg -hide_banner -i $v -i "$file" $map -c:v copy -aspect $dar -c:a copy $meta "$o"
 ffprobe -hide_banner "$o" 2>&1 | tee -a "$log"
 
