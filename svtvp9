@@ -6,6 +6,9 @@
 
 # https://github.com/OpenVisualCloud/SVT-VP
 
+decode=cuvid
+#decode=vaapi
+
 file="$1"
 f1=${file%.*}
 #exit
@@ -61,17 +64,25 @@ IFS='=' read _ dar <<< $dar
 # codec_name=vc1
 # codec_name=mpeg2video
 vc=$(grep ^codec_name $t | head -n 1 | cut -d '=' -f 2)
-case $vc in
-    mpeg2video)
-	dec="-hwaccel cuvid -hwaccel_output_format cuda -c:v mpeg2_cuvid"
-	dec2="-vf hwdownload,format=nv12"
+case $decode in
+    cuvid)
+	case $vc in
+	    mpeg2video)
+		dec="-hwaccel cuvid -hwaccel_output_format cuda -c:v mpeg2_cuvid"
+		dec2="-vf hwdownload,format=nv12"
+		;;
+	    vc1)
+		dec="-hwaccel cuvid -hwaccel_output_format cuda -c:v vc1_cuvid"
+		dec2="-vf hwdownload,format=nv12"
+		;;
+	    h264)
+		dec="-hwaccel cuvid -hwaccel_output_format cuda -c:v h264_cuvid"
+		dec2="-vf hwdownload,format=nv12"
+		;;
+	esac
 	;;
-    vc1)
-	dec="-hwaccel cuvid -hwaccel_output_format cuda -c:v vc1_cuvid"
-	dec2="-vf hwdownload,format=nv12"
-	;;
-    h264)
-	dec="-hwaccel cuvid -hwaccel_output_format cuda -c:v h264_cuvid"
+    vaapi)
+	dec="-hwaccel vaapi -vaapi_device /dev/dri/renderD128 -hwaccel_output_format vaapi"
 	dec2="-vf hwdownload,format=nv12"
 	;;
 esac
@@ -82,8 +93,9 @@ echo $w"x"$h $f $s $fr $sar $dar
 #av1opt="-i stdin -n $fr -w $w -h $h --fps $f2 --fps-num $fn --fps-denom $fd --preset 8 -q 50 -b $v"
 #lp="--lp 4"
 #vp9opt="-i stdin -n $fr -w $w -h $h --fps-num $fn --fps-denom $fd --preset 8 -q 50 -b $v $lp"
-vp9opt="-i stdin -n $fr -w $w -h $h -fps-num $fn -fps-denom $fd -b $v $lp"
-ffmpeg -hide_banner $dec -i "$file" -nostdin $dec2 -f rawvideo -pix_fmt yuv420p - 2> "$loge" | SvtVp9EncApp $vp9opt 2>&1 | tee "$log"
+vp9opt="-n $fr -w $w -h $h -fps-num $fn -fps-denom $fd -b $v $lp"
+echo "$vp9opt" > "$log"
+ffmpeg -hide_banner $dec -i "$file" -nostdin $dec2 -f rawvideo -pix_fmt yuv420p - 2> "$loge" | nice SvtVp9EncApp -i stdin $vp9opt 2>&1 | tee -a "$log"
 #map="-map 0 -map 1:a -map 1:s? -map_chapters 1"
 map="-map 0 -map 1:a -map_chapters 1"
 vers=$(SvtVp9EncApp --version | head -n 1)
