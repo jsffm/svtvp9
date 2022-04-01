@@ -4,7 +4,7 @@
 
 # Trandcoding to vp9 with ffmpeg and SVT-VP9
 
-# https://github.com/OpenVisualCloud/SVT-VP
+# https://github.com/OpenVisualCloud/SVT-VP9
 
 decode=cuvid
 #decode=vaapi
