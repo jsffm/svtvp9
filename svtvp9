@@ -15,7 +15,7 @@ f1=${file%.*}
 
 t=/tmp/svtvp9
 t2=/tmp/svtvp9_2
-v=video.ivf
+v=/tmp/video.ivf
 #o=test.mkv
 o=$f1-vp9.mkv
 #log=svtav1.log
@@ -23,6 +23,12 @@ o=$f1-vp9.mkv
 log=$o.log
 loge=$o.err
 deinterlacer=yadif
+
+if [ -e $o ]
+then
+    echo $o exists.
+    exit 8
+fi
 
 start=$(date +%s)
 
@@ -103,13 +109,15 @@ esac
 echo $w"x"$h $f $s $fr $sar $dar $field_order $opt
 #exit
 
+mkfifo $v
+
 #av1opt="-i stdin -n $fr -w $w -h $h --fps $f2 --fps-num $fn --fps-denom $fd --preset 8 -q 50 -b $v"
 #lp="--lp 4"
 #vp9opt="-i stdin -n $fr -w $w -h $h --fps-num $fn --fps-denom $fd --preset 8 -q 50 -b $v $lp"
 vp9opt="-n $fr -w $w -h $h -fps-num $fn -fps-denom $fd -b $v $lp"
 echo "$vp9opt" > "$log"
 echo "$opt" >> "$log"
-ffmpeg -hide_banner $dec -i "$file" -nostdin $opt $dec2 -f rawvideo -pix_fmt yuv420p - 2> "$loge" | nice SvtVp9EncApp -i stdin $vp9opt 2>&1 | tee -a "$log"
+ffmpeg -hide_banner $dec -i "$file" -nostdin $opt $dec2 -f rawvideo -pix_fmt yuv420p - 2> "$loge" | nice SvtVp9EncApp -i stdin $vp9opt 2>&1 | tee -a "$log" &
 #map="-map 0 -map 1:a -map 1:s? -map_chapters 1"
 map="-map 0 -map 1:a -map_chapters 1"
 vers=$(SvtVp9EncApp --version | head -n 1)
@@ -118,6 +126,8 @@ vers=${vers//' '/_}
 meta="-metadata:s:v:0 encoder=$vers"
 ffmpeg -hide_banner -i $v -i "$file" $map -c:v copy -aspect $dar -c:a copy $meta "$o"
 ffprobe -hide_banner "$o" 2>&1 | tee -a "$log"
+
+rm $v
 
 stop=$(date +%s)
 dur=$(($stop-$start))
